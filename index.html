@@ -6,7 +6,6 @@
     <title>Coffee Machine Simulator</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
     <style>
         body {
             background-color: #0f172a;
@@ -71,54 +70,49 @@
             fontSize: 15
         });
         term.open(document.getElementById('terminal'));
-        term.write('Initializing Python environment...\r\n');
+        term.write('Loading Python engine...\r\n');
 
-        async function initPyodideRunner() {
-            const pyodide = await loadPyodide();
-            
-            // Custom input queue for interactive prompts
-            let inputResolve = null;
-            let currentLine = '';
+        // Inline Web Worker script
+        const workerCode = `
+            importScripts("https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js");
 
-            term.onData(data => {
-                if (!inputResolve) return;
+            async function start() {
+                const pyodide = await loadPyodide();
 
-                if (data === '\r') { // Enter key
-                    term.write('\r\n');
-                    const response = currentLine;
-                    currentLine = '';
-                    const resolve = inputResolve;
-                    inputResolve = null;
-                    resolve(response);
-                } else if (data === '\u007F' || data === '\b') { // Backspace
-                    if (currentLine.length > 0) {
-                        currentLine = currentLine.slice(0, -1);
-                        term.write('\b \b');
+                self.onmessage = (e) => {
+                    if (e.data.type === 'input_response') {
+                        if (self.resolveInput) {
+                            self.resolveInput(e.data.value);
+                            self.resolveInput = null;
+                        }
                     }
-                } else if (data >= ' ') {
-                    currentLine += data;
-                    term.write(data);
-                }
-            });
+                };
 
-            pyodide.setStdout({
-                batched: (str) => {
-                    term.write(str.replace(/\n/g, '\r\n') + '\r\n');
-                }
-            });
+                pyodide.setStdout({
+                    batched: (text) => {
+                        self.postMessage({ type: 'stdout', text: text });
+                    }
+                });
 
-            pyodide.setStdin({
-                stdin: () => {
-                    return new Promise(resolve => {
-                        inputResolve = resolve;
-                    });
-                }
-            });
+                pyodide.setStderr({
+                    batched: (text) => {
+                        self.postMessage({ type: 'stdout', text: text });
+                    }
+                });
 
-            term.clear();
+                pyodide.setStdin({
+                    stdin: () => {
+                        self.postMessage({ type: 'request_input' });
+                        const deq = new Promise((resolve) => {
+                            self.resolveInput = resolve;
+                        });
+                        return deq;
+                    }
+                });
 
-            // Run your Coffee Machine Python Code
-            const pythonCode = `
+                self.postMessage({ type: 'ready' });
+
+                const pythonCode = \`
 Menu = {
     "espresso": {
         "ingredients": {
@@ -243,12 +237,46 @@ while not is_off:
         input("Press Enter to continue...")
     else:
         coffee_menu(choice)
-`;
+\`;
 
-            await pyodide.runPythonAsync(pythonCode);
-        }
+                try {
+                    await pyodide.runPythonAsync(pythonCode);
+                } catch (err) {
+                    self.postMessage({ type: 'stdout', text: String(err) });
+                }
+            }
 
-        initPyodideRunner();
+            start();
+        `;
+
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const worker = new Worker(URL.createObjectURL(blob));
+
+        let currentLine = '';
+
+        worker.onmessage = (e) => {
+            if (e.data.type === 'ready') {
+                term.clear();
+            } else if (e.data.type === 'stdout') {
+                term.write(e.data.text.replace(/\n/g, '\r\n') + '\r\n');
+            }
+        };
+
+        term.onData((data) => {
+            if (data === '\r') { // Enter key pressed
+                term.write('\r\n');
+                worker.postMessage({ type: 'input_response', value: currentLine });
+                currentLine = '';
+            } else if (data === '\u007F' || data === '\b') { // Backspace
+                if (currentLine.length > 0) {
+                    currentLine = currentLine.slice(0, -1);
+                    term.write('\b \b');
+                }
+            } else if (data >= ' ') { // Normal character
+                currentLine += data;
+                term.write(data);
+            }
+        });
     </script>
 </body>
 </html>
