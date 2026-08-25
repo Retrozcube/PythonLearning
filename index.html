@@ -4,37 +4,121 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Coffee Machine Simulator</title>
-    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
-    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
     <style>
         body {
-            background-color: #121212;
-            color: #ffffff;
-            font-family: monospace;
-            padding: 20px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
             margin: 0;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
-        h2 {
-            color: #38bdf8;
-            margin-bottom: 4px;
-        }
-        p {
-            color: #a1a1aa;
-            margin-top: 0;
+        .header-container {
+            width: 100%;
+            max-width: 820px;
             margin-bottom: 12px;
         }
-        py-terminal {
-            min-height: 480px;
+        h2 {
+            margin: 0 0 4px 0;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        #terminal-wrapper {
+            width: 100%;
+            max-width: 820px;
+            background: #000000;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            border: 1px solid #334155;
+            padding: 12px;
+            box-sizing: border-box;
+        }
+        #terminal {
+            width: 100%;
+            height: 480px;
         }
     </style>
 </head>
 <body>
-    <h2>☕ Coffee Machine Terminal</h2>
-    <p>Click inside the terminal box below to interact:</p>
+    <div class="header-container">
+        <h2>☕ Coffee Machine Simulator</h2>
+        <p>Interactive Terminal — Click inside and start typing commands below:</p>
+    </div>
 
-    <script type="py" terminal worker>
-import sys
+    <div id="terminal-wrapper">
+        <div id="terminal"></div>
+    </div>
 
+    <script type="module">
+        const term = new Terminal({
+            cursorBlink: true,
+            theme: {
+                background: '#000000',
+                foreground: '#f8fafc',
+                cursor: '#38bdf8'
+            },
+            fontFamily: 'Courier New, monospace',
+            fontSize: 15
+        });
+        term.open(document.getElementById('terminal'));
+        term.write('Initializing Python environment...\r\n');
+
+        async function initPyodideRunner() {
+            const pyodide = await loadPyodide();
+            
+            // Custom input queue for interactive prompts
+            let inputResolve = null;
+            let currentLine = '';
+
+            term.onData(data => {
+                if (!inputResolve) return;
+
+                if (data === '\r') { // Enter key
+                    term.write('\r\n');
+                    const response = currentLine;
+                    currentLine = '';
+                    const resolve = inputResolve;
+                    inputResolve = null;
+                    resolve(response);
+                } else if (data === '\u007F' || data === '\b') { // Backspace
+                    if (currentLine.length > 0) {
+                        currentLine = currentLine.slice(0, -1);
+                        term.write('\b \b');
+                    }
+                } else if (data >= ' ') {
+                    currentLine += data;
+                    term.write(data);
+                }
+            });
+
+            pyodide.setStdout({
+                batched: (str) => {
+                    term.write(str.replace(/\n/g, '\r\n') + '\r\n');
+                }
+            });
+
+            pyodide.setStdin({
+                stdin: () => {
+                    return new Promise(resolve => {
+                        inputResolve = resolve;
+                    });
+                }
+            });
+
+            term.clear();
+
+            // Run your Coffee Machine Python Code
+            const pythonCode = `
 Menu = {
     "espresso": {
         "ingredients": {
@@ -86,6 +170,7 @@ def coffee_menu(type_of_drink):
     drink_requirements = Menu[type_of_drink]["ingredients"]
     item_cost = Menu[type_of_drink]["cost"]
 
+    # Step 1: Check if there are enough ingredients
     for item, amount in drink_requirements.items():
         if resources[item] < amount:
             print(f"Sorry, there is not enough {item}.")
@@ -93,11 +178,17 @@ def coffee_menu(type_of_drink):
             input("Press Enter to continue...")
             return
 
-    print(f"\nA {type_of_drink} costs ${item_cost:.2f}.")
-    how_many_quarters = int(input("How many quarters do you have? "))
-    how_many_dimes = int(input("How many dimes do you have? "))
-    how_many_nickles = int(input("How many nickles do you have? "))
-    how_many_pennies = int(input("How many pennies do you have? "))
+    # Step 2: If it passed the check, ask for money
+    print(f"\\nA {type_of_drink} costs \${item_cost:.2f}.")
+    try:
+        how_many_quarters = int(input("How many quarters do you have? "))
+        how_many_dimes = int(input("How many dimes do you have? "))
+        how_many_nickles = int(input("How many nickles do you have? "))
+        how_many_pennies = int(input("How many pennies do you have? "))
+    except ValueError:
+        print("Invalid coin entry. Money refunded.")
+        input("Press Enter to continue...")
+        return
 
     money_inserted = (
         (how_many_pennies * wallet['penny'])
@@ -106,6 +197,7 @@ def coffee_menu(type_of_drink):
         + (how_many_quarters * wallet['quarter'])
     )
 
+    # Step 3: Process the payment
     if money_inserted >= item_cost:
         calculation(type_of_drink, drink_requirements, money_inserted, item_cost)
     else:
@@ -121,16 +213,16 @@ def calculation(type_of_drink, drink_requirements, money_inserted, item_cost):
     profit += item_cost
     change = money_inserted - item_cost
 
-    print(f"\nHere is your {type_of_drink} ☕. Enjoy!")
+    print(f"\\nHere is your {type_of_drink} ☕. Enjoy!")
     if change > 0:
-        print(f"Here is your change: ${change:.2f}")
+        print(f"Here is your change: \${change:.2f}")
     input("Press Enter to continue...")
 
 
 is_off = False
 while not is_off:
     print("----------------------------------------")
-    print("Instructions:\noff - Turn off machine\nreport - View resources & profit\nrefill - Refill resources")
+    print("Instructions:\\noff - Turn off machine\\nreport - View resources & profit\\nrefill - Refill resources")
     print("----------------------------------------")
     choice = input("What would you like? (espresso/latte/cappuccino): ").strip().lower()
 
@@ -141,7 +233,7 @@ while not is_off:
         print(f"Water: {resources['water']}ml")
         print(f"Milk: {resources['milk']}ml")
         print(f"Coffee: {resources['coffee']}g")
-        print(f"Money: ${profit:.2f}")
+        print(f"Money: \${profit:.2f}")
         input("Press Enter to continue...")
     elif choice == "refill":
         resources['water'] = 300
@@ -151,6 +243,12 @@ while not is_off:
         input("Press Enter to continue...")
     else:
         coffee_menu(choice)
+`;
+
+            await pyodide.runPythonAsync(pythonCode);
+        }
+
+        initPyodideRunner();
     </script>
 </body>
 </html>
