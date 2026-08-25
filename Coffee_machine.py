@@ -1,3 +1,15 @@
+import builtins
+
+# --- BROWSER TERMINAL FIX ---
+# This forces the browser to instantly push text to the screen 
+# before pausing for your keyboard, fixing the invisible prompt bug!
+def instant_input(prompt_text=""):
+    print(prompt_text, end="", flush=True)
+    return builtins.input()
+
+builtins.input = instant_input
+# ----------------------------
+
 Menu = {
     "espresso": {
         "ingredients": {
