@@ -1,11 +1,14 @@
 import builtins
 
 # --- BROWSER TERMINAL FIX ---
-# This forces the browser to instantly push text to the screen 
-# before pausing for your keyboard, fixing the invisible prompt bug!
+# Save the original input so we don't accidentally create an infinite loop!
+original_input = builtins.input
+
 def instant_input(prompt_text=""):
+    # Force the text to appear on the screen immediately
     print(prompt_text, end="", flush=True)
-    return builtins.input()
+    # Call the REAL input command we saved earlier
+    return original_input()
 
 builtins.input = instant_input
 # ----------------------------
