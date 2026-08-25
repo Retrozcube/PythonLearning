@@ -39,7 +39,6 @@ wallet = {
 
 profit = 0
 
-
 def coffee_menu(type_of_drink):
     if type_of_drink not in Menu:
         print(f"Sorry, '{type_of_drink}' is not on the menu.")
@@ -57,12 +56,17 @@ def coffee_menu(type_of_drink):
             input("Press Enter to continue...")
             return
 
-    # Step 2: If it passed the check, ask for money
+    # Step 2: Ask for money
     print(f"\nA {type_of_drink} costs ${item_cost:.2f}.")
-    how_many_quarters = int(input("How many quarters do you have? "))
-    how_many_dimes = int(input("How many dimes do you have? "))
-    how_many_nickles = int(input("How many nickles do you have? "))
-    how_many_pennies = int(input("How many pennies do you have? "))
+    try:
+        how_many_quarters = int(input("How many quarters do you have? "))
+        how_many_dimes = int(input("How many dimes do you have? "))
+        how_many_nickles = int(input("How many nickles do you have? "))
+        how_many_pennies = int(input("How many pennies do you have? "))
+    except ValueError:
+        print("Invalid coin entry. Money refunded.")
+        input("Press Enter to continue...")
+        return
 
     money_inserted = (
         (how_many_pennies * wallet['penny'])
@@ -78,11 +82,8 @@ def coffee_menu(type_of_drink):
         print("Sorry, that's not enough money. Money refunded.")
         input("Press Enter to continue...")
 
-
 def calculation(type_of_drink, drink_requirements, money_inserted, item_cost):
     global profit
-    
-    # Deduct resources
     for item, value in drink_requirements.items():
         resources[item] -= value
         
@@ -94,10 +95,9 @@ def calculation(type_of_drink, drink_requirements, money_inserted, item_cost):
         print(f"Here is your change: ${change:.2f}")
     input("Press Enter to continue...")
 
-
 is_off = False
 while not is_off:
-    print("\n----------------------------------------")
+    print("----------------------------------------")
     print("Instructions:\noff - Turn off machine\nreport - View resources & profit\nrefill - Refill resources")
     print("----------------------------------------")
     choice = input("What would you like? (espresso/latte/cappuccino): ").strip().lower()
